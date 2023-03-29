@@ -26,6 +26,7 @@ import type {
   TournamentEndedMessage,
   NoActiveTournamentMessage,
   ArenaIsFullMessage,
+  InvalidMessage,
 } from './types_messages';
 
 const HEARTBEAT_INTERVAL = 5000;
@@ -33,7 +34,7 @@ const SUPPORTED_GAME_MODES = new Set(Object.values(GameMode));
 export let snakeConsole = {} as Console;
 
 export type SnakeImplementation = {
-  getNextMove: (gameMap: GameMap, gameSettings: GameSettings, gameTick: number) => Promise<Direction>;
+  getNextMove: (gameMap: GameMap) => Promise<Direction>;
   onMessage?: (message: any) => void;
   trainingGameSettings: GameSettings;
 }
@@ -73,8 +74,6 @@ export function createClient({
   
   // Update snakeConsole to use the given logger
   snakeConsole = logger;
-  
-  let hasSentDirection = true;
   
   let apiEndpoint;
   // If the venue is an arena code, we add '/arena' to the endpoint
@@ -161,6 +160,9 @@ export function createClient({
       case MessageType.ArenaIsFull:
         arenaIsFull(message as ArenaIsFullMessage);
         break;
+      case MessageType.InvalidMessage:
+        invalidMessage(message as InvalidMessage);
+        break;
       default:
         logger.warn(colors.bold.red('Unknown Event'), message.type);
         logger.log("Message was:", data);
@@ -203,8 +205,8 @@ export function createClient({
         logger.info(colors.yellow(`Disabling logs to prevent spoilers`));
         logger = {
           log: () => {},
-          error: () => {},
-          warn: () => {},
+          error: logger.error,
+          warn: logger.warn,
           info: () => {},
         } as Console;
 
@@ -236,20 +238,12 @@ export function createClient({
 
   async function mapUpdateEvent({map, receivingPlayerId, gameId, gameTick, timestamp}: MapUpdateEventMessage) {
     // logger.debug(`Game turn #${gameTick}`);
-    const gameMap = new GameMap(map, receivingPlayerId);
-    if (!hasSentDirection) {
-      logger.warn(colors.red(`Last move took too long to calculate! (gameTick:${gameTick})`));
-    }
-    hasSentDirection = false;
-    const direction = await snake.getNextMove(gameMap, gameSettings, gameTick);
+    const gameMap = new GameMap(map, receivingPlayerId, gameSettings, gameTick);
+    const direction = await snake.getNextMove(gameMap);
     sendMessage(createRegisterMoveMessage(direction, receivingPlayerId, gameId, gameTick));
-    hasSentDirection = true;
   }
 
   function snakeDeadEvent(message: SnakeDeadEventMessage) {
-    if (!hasSentDirection) {
-      logger.warn(colors.red(`Last move took too long to calculate! (gameTick:${message.gameTick})`));
-    }
     if (spoiler) logger.info('Snake died because:', colors.red(message.deathReason));
   }
 
@@ -287,6 +281,10 @@ export function createClient({
   function arenaIsFull(message: ArenaIsFullMessage) {
     logger.info(colors.red(`The arena ${venue} is full, players connected: ${message.playersConnected}`));
     close();
+  }
+
+  function invalidMessage(message: InvalidMessage) {
+    logger.warn(colors.red(message.errorMessage));
   }
 
   return {

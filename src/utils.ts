@@ -1,4 +1,5 @@
 import { Direction, RawMap, RelativeDirection, SnakeInfo, TileType } from "./types";
+import { GameSettings } from "./types";
 
 /**
  * Converts a direction to a representation in coordinates.
@@ -148,6 +149,29 @@ export class Coordinate {
     const directionDelta = getDirectionDelta(direction);
     return this.translateByDelta(directionDelta);
   }
+
+  /**
+   * ONLY works for neighboring coordinates! (No pathfinding here)
+   * @param otherCoordinate Coordinate *neighboring* this coordinate to compare to.
+   * @returns Direction to move to get to the other coordinate.
+   */
+  directionTo(otherCoordinate: Coordinate): Direction {
+    const { x: x0, y: y0 } = this;
+    const { x: x1, y: y1 } = otherCoordinate;
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    if (dx === 0 && dy === -1) {
+      return Direction.Up;
+    } else if (dx === 0 && dy === 1) {
+      return Direction.Down;
+    } else if (dx === -1 && dy === 0) {
+      return Direction.Left;
+    } else if (dx === 1 && dy === 0) {
+      return Direction.Right;
+    } else {
+      throw new Error(`The coordinate is too far away!, Difference is (${dx}, ${dy})`);
+    }
+  }
 }
 
 export class Snake {
@@ -250,8 +274,10 @@ export class GameMap {
   height: number;
   snakes: Map<string, Snake>;
   tiles: Map<number, TileType>;
+  gameSettings: GameSettings;
+  gameTick: number;
 
-  constructor(map: RawMap, playerId: string) {
+  constructor(map: RawMap, playerId: string, gameSettings: GameSettings, gameTick: number) {
     const snakes = new Map<string, Snake>();
     const tiles = new Map<number, TileType>();
 
@@ -276,6 +302,8 @@ export class GameMap {
     this.height = map.height;
     this.snakes = snakes;
     this.tiles = tiles;
+    this.gameSettings = gameSettings;
+    this.gameTick = gameTick;
   }
 
   get playerSnake() {
